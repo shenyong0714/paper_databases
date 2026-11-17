@@ -242,22 +242,65 @@ function renderDetail(){
     <div class="sec">
       <h3>Ask this paper</h3>
       ${isReady(p) ? `
-        <p class="empty">Ask questions about this paper in Claude.</p>
+        <p class="empty" style="padding:6px 0">Copies this paper (abstract, figure captions and full text) and opens the July project in Claude.
+        Start a new chat there and paste. Every paper's chat lives in July, so Claude can connect them over time.</p>
         <div class="claude-link">
-          <a href="https://claude.ai/new?q=${encodeURIComponent('Read this arXiv paper and answer my questions: https://arxiv.org/abs/'+p.arxiv_id)}" target="_blank" rel="noopener">
-            Ask in Claude &rarr;
-          </a>
-        </div>` :
+          <a href="${JULY_URL}" target="_blank" rel="noopener" id="ask">Copy &amp; open in July &rarr;</a>
+        </div>
+        <p class="note" id="asknote">${textCache.has(p.arxiv_id) ? "Full text ready to copy." : "Loading full text…"}</p>` :
         `<p class="empty">Available once the paper's text has been pulled in.</p>`}
     </div>`;
   $("#back")?.addEventListener("click",()=>{ $("#pane-list").classList.remove("hide");
     $("#pane-detail").classList.remove("on"); });
   $("#save")?.addEventListener("click",()=>toggleSave(p));
+  $("#ask")?.addEventListener("click",()=>askInJuly(p));
+  if(isReady(p)) loadText(p);
   d.querySelectorAll("[data-zoom]").forEach(img=>img.addEventListener("click",()=>{
     const z=document.createElement("div"); z.className="zoom";
     z.innerHTML=`<img src="${img.dataset.zoom}" alt="">`;
     z.onclick=()=>z.remove(); document.body.appendChild(z);
   }));
+}
+
+// ---------- Ask in Claude: copy the paper, open the July project ----------
+const JULY_URL = 'https://claude.ai/project/01a0b155-d37a-74ce-8ed7-a9500b47a4c2';
+const textCache = new Map();   // arxiv_id -> full text (prefetched so the click can copy at once)
+
+async function loadText(p){
+  if(textCache.has(p.arxiv_id)) return;
+  const { data, error } = await supabase.from('fulltext').select('part,text')
+    .eq('arxiv_id', p.arxiv_id).order('part');
+  if(error){ console.warn('fulltext', error); return; }
+  textCache.set(p.arxiv_id, (data||[]).map(r=>r.text).join(''));
+  const n = document.getElementById('asknote');
+  if(n && state.sel === p.arxiv_id) n.textContent = 'Full text ready to copy.';
+}
+
+function paperPrompt(p){
+  const caps = (p.figures||[]).map(x=>`- Fig. ${x.n} (p${x.page}): ${x.caption}`).join('\n');
+  const full = textCache.get(p.arxiv_id);
+  return [
+    `New paper for my Paper Desk. Read it, keep it in mind alongside the other papers in this project, then answer my questions.`,
+    ``,
+    `Title: ${p.title}`,
+    `arXiv: https://arxiv.org/abs/${p.arxiv_id}  (${p.cat||''})`,
+    `Authors: ${(p.authors||[]).join(', ')}`,
+    `Matched keywords: ${(p.matched||[]).join(', ')}`,
+    ``,
+    `Abstract:`, p.abstract || '',
+    caps ? `\nFigure captions:\n${caps}` : '',
+    full ? `\n===== FULL TEXT =====\n${full}` : `\n(Full text not loaded; read the arXiv link above.)`,
+  ].join('\n');
+}
+
+function askInJuly(p){
+  // no await before the copy: the browser only allows clipboard writes during the click itself
+  const txt = paperPrompt(p);
+  navigator.clipboard.writeText(txt).then(
+    ()=>note(textCache.has(p.arxiv_id) ? 'Copied with full text. Start a new chat in July and paste.'
+                                        : 'Copied (abstract only). Start a new chat in July and paste.'),
+    e=>note(`Could not copy: ${e.message}`, true));
+  // the link itself opens July in a new tab
 }
 
 async function toggleSave(p){
