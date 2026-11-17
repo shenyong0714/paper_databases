@@ -346,7 +346,12 @@ def main():
     extracted, errs = run_extraction(existing)
     errors += errs
 
-    record_run(fetch_data, added, updated, extracted, errors)
+    # one runs row per day: only the fetching run writes it, so the frequent
+    # extract-only runs don't overwrite the morning's "+N new" summary
+    if not extract_only:
+        record_run(fetch_data, added, updated, extracted, errors)
+    else:
+        print(f"\nExtract-only: {extracted} extracted, {len(errors)} errors")
     print(f"\nCompleted: {now_iso()}")
     # a failed fetch should show up red in the Actions tab
     if fetch_data is None and not extract_only:
