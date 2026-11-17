@@ -71,6 +71,12 @@ header.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;
 .kw{display:inline-block;background:var(--raise);color:var(--muted);border-radius:3px;
     padding:1px 5px;font-size:10px;font-family:var(--f-mono)}
 .dot{width:5px;height:5px;border-radius:50%;background:var(--gold);flex:none}
+.search{width:100%;margin-bottom:10px;background:var(--surface);border:1px solid var(--line);
+  border-radius:6px;padding:8px 11px;font:inherit;font-size:13.5px;color:var(--ink)}
+.search:focus{outline:2px solid var(--accent);outline-offset:-1px}
+.dayhead{background:var(--raise);padding:7px 13px;font-family:var(--f-mono);font-size:11px;
+  letter-spacing:.04em;color:var(--muted);display:flex;justify-content:space-between}
+.dayhead.wk{background:var(--paper);color:var(--faint);text-transform:uppercase;letter-spacing:.09em;font-size:10px}
 
 .pane.detail{background:var(--surface);border:1px solid var(--line);border-radius:8px;
              padding:22px 24px;min-height:200px}
@@ -139,7 +145,9 @@ figcaption b{font-family:var(--f-mono);font-size:11px;color:var(--accent);font-w
   </header>
 
   <div class="cols">
-    <div class="pane list" id="pane-list"><div class="plist" id="plist"></div>
+    <div class="pane list" id="pane-list">
+      <input class="search" id="q" type="search" placeholder="Search title, author or arXiv id" autocomplete="off">
+      <div class="plist" id="plist"></div>
       <p class="note" id="listnote"></p>
     </div>
     <div class="pane detail" id="pane-detail"></div>
@@ -156,7 +164,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const $ = (s,r=document)=>r.querySelector(s);
 const esc = s => String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-const state = {tab:"week", papers:[], sel:null};
+const state = {tab:"week", papers:[], sel:null, q:""};
 
 const hasFigs = p => Array.isArray(p.figures) && p.figures.length > 0;
 const hasText = p => +p.text_parts > 0;
@@ -168,25 +176,60 @@ const posted = p => {
   return m ? (+m[1])*1e9 + (+m[2])*1e7 + (+m[3]) : -1;
 };
 
+// "This week" shows the current and the previous week (Mon-Sun, US Eastern), grouped by arXiv listing day
+const nyToday = () => new Date().toLocaleDateString("en-CA",{timeZone:"America/New_York"}); // YYYY-MM-DD
+function keepFrom(){
+  const d = new Date(nyToday()+"T12:00:00Z");
+  d.setUTCDate(d.getUTCDate() - ((d.getUTCDay()+6)%7) - 7);   // Monday of last week
+  return d.toISOString().slice(0,10);
+}
+const dayOf = p => p.announced || (p.created_at||"").slice(0,10);
+const inWindow = p => !dayOf(p) || dayOf(p) >= keepFrom();
+const dayLabel = d => new Date(d+"T12:00:00Z").toLocaleDateString("en-US",
+  {weekday:"short", month:"short", day:"numeric", timeZone:"UTC"});
+function weekStart(d){ const x=new Date(d+"T12:00:00Z"); x.setUTCDate(x.getUTCDate()-((x.getUTCDay()+6)%7)); return x.toISOString().slice(0,10); }
+const matchesQ = p => {
+  const q = state.q.trim().toLowerCase(); if(!q) return true;
+  const hay = (p.title+" "+(p.authors||[]).join(" ")+" "+p.arxiv_id).toLowerCase();
+  return q.split(/\s+/).every(w => hay.includes(w));
+};
+const weekRows = () => state.papers.filter(p => !inArchive(p) && inWindow(p));
+const archRows = () => state.papers.filter(inArchive);
+
 function render(){
-  $("#n-week").textContent = state.papers.filter(p=>!inArchive(p)).length || "";
-  $("#n-arch").textContent = state.papers.filter(inArchive).length || "";
+  $("#n-week").textContent = weekRows().length || "";
+  $("#n-arch").textContent = archRows().length || "";
   for(const t of ["week","arch"])
     $("#tab-"+t).setAttribute("aria-selected", state.tab===t);
 
-  const rows = state.papers.filter(p => state.tab==="week" ? !inArchive(p) : inArchive(p))
+  const rows = (state.tab==="week" ? weekRows() : archRows()).filter(matchesQ)
     .sort(state.tab==="week"
-      ? (a,b)=> (posted(b)-posted(a)) || (b.score-a.score) || a.title.localeCompare(b.title)
+      ? (a,b)=> (dayOf(b)||"").localeCompare(dayOf(a)||"") || (b.score-a.score) || (posted(b)-posted(a))
       // archive: most recently saved first
       : (a,b)=> ((Date.parse(b.saved_at)||0)-(Date.parse(a.saved_at)||0)) || (posted(b)-posted(a)));
 
   const list = $("#plist");
   list.innerHTML = rows.length ? "" :
     `<div style="background:var(--surface);padding:22px 14px" class="empty">${
-      state.tab==="week" ? "No papers in this week's queue yet."
+      state.q.trim() ? "No papers match this search."
+      : state.tab==="week" ? "No papers in the last two weeks yet."
       : "Nothing archived yet. Open a paper from this week and press Save."}</div>`;
 
+  let lastDay = null, lastWeek = null;
+  const thisWeek = weekStart(nyToday());
   for(const p of rows){
+    if(state.tab==="week" && dayOf(p) && dayOf(p)!==lastDay){
+      const wk = weekStart(dayOf(p));
+      if(wk!==lastWeek){
+        const h=document.createElement("div"); h.className="dayhead wk";
+        h.textContent = wk===thisWeek ? "This week" : "Last week";
+        list.appendChild(h); lastWeek=wk;
+      }
+      const n = rows.filter(x=>dayOf(x)===dayOf(p)).length;
+      const h=document.createElement("div"); h.className="dayhead";
+      h.innerHTML = `<span>${esc(dayLabel(dayOf(p)))}</span><span>${n}</span>`;
+      list.appendChild(h); lastDay=dayOf(p);
+    }
     const b=document.createElement("button");
     b.className="pitem"; b.setAttribute("aria-current", state.sel===pid(p));
     b.innerHTML = `<span class="score">${esc(String(p.score))}</span><span>
@@ -203,7 +246,8 @@ function render(){
       if(innerWidth<=860){ $("#pane-list").classList.add("hide"); $("#pane-detail").classList.add("on"); } };
     list.appendChild(b);
   }
-  $("#listnote").textContent = rows.length ? `${rows.length} paper${rows.length>1?"s":""}` : "";
+  $("#listnote").textContent = rows.length ? `${rows.length} paper${rows.length>1?"s":""}` +
+    (state.tab==="week" ? " · unsaved papers older than last week are removed" : "") : "";
 }
 
 function figHTML(p){
@@ -334,6 +378,7 @@ function note(msg, bad){
   noteTimer = setTimeout(()=>{ el.hidden = true; }, bad ? 9000 : 3500);
 }
 
+$("#q").addEventListener("input", e=>{ state.q=e.target.value; render(); });
 $("#tab-week").onclick=()=>{state.tab="week";render();};
 $("#tab-arch").onclick=()=>{state.tab="arch";render();};
 
@@ -359,7 +404,7 @@ $("#tab-arch").onclick=()=>{state.tab="arch";render();};
     state.papers = papers || [];
 
     if(!state.sel && state.papers.length){
-      const wk=state.papers.filter(p=>!inArchive(p)).sort((a,b)=>posted(b)-posted(a));
+      const wk=weekRows().sort((a,b)=>(dayOf(b)||"").localeCompare(dayOf(a)||"")||(b.score-a.score));
       state.sel=(wk[0]||state.papers[0]).arxiv_id;
     }
 

@@ -139,3 +139,7 @@ CREATE TRIGGER papers_updated_at
     BEFORE UPDATE ON papers
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at();
+
+-- 2026-11-17: arXiv listing date (US Eastern) used to group "This week" by day and to prune
+alter table papers add column if not exists announced date;
+create index if not exists papers_announced_idx on papers (announced);

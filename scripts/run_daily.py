@@ -18,7 +18,9 @@ import time
 import shutil
 import subprocess
 import urllib.request
-from datetime import datetime, timezone
+import xml.etree.ElementTree as ET
+from datetime import datetime, timezone, timedelta, date
+from zoneinfo import ZoneInfo
 from pathlib import Path
 from supabase import create_client, Client
 
@@ -44,6 +46,8 @@ MAX_EXTRACT = int(os.environ.get('MAX_EXTRACT', '25'))  # papers per run
 PDF_PAUSE = 3          # seconds between arXiv PDF downloads (arXiv asks for politeness)
 TEXT_CHUNK = 60000     # characters per fulltext row
 ROW_FIELDS = ('arxiv_id', 'title', 'abstract', 'authors', 'cat', 'score', 'matched')
+ET_TZ = ZoneInfo('America/New_York')
+KEEP_WEEKS = 2         # 'This week' keeps the current and the previous week; older unsaved papers are deleted
 
 
 def now_iso():
@@ -53,6 +57,38 @@ def now_iso():
 def clean(s):
     # Postgres text cannot hold NUL; some PDFs emit it in extracted text
     return (s or '').replace('\x00', '')
+
+
+# ---- arXiv listing dates (US Eastern). arXiv announces at 20:00 ET Sun-Thu; a listing is
+# labelled with the next day's date, which is when the morning digest picks it up.
+def _weekday_back(d):
+    return d - timedelta(days={5: 1, 6: 2}.get(d.weekday(), 0))   # Sat/Sun -> Fri
+
+
+def listing_date_now():
+    t = datetime.now(ET_TZ)
+    d = t.date() + timedelta(days=1 if t.hour >= 20 else 0)
+    return _weekday_back(d)
+
+
+def listing_date_from_submission(ts):
+    """Approximate listing date from the v1 submission time (14:00 ET cutoff, no holidays)."""
+    t = ts.astimezone(ET_TZ)
+    d = t.date()
+    if d.weekday() >= 5 or t.hour >= 14:          # after cutoff or weekend -> next weekday's cutoff
+        d += timedelta(days=1)
+        while d.weekday() >= 5:
+            d += timedelta(days=1)
+    nxt = d + timedelta(days=1)                   # listed the day after the cutoff day
+    while nxt.weekday() >= 5:
+        nxt += timedelta(days=1)
+    return nxt
+
+
+def keep_from():
+    """Monday of the oldest week still shown in 'This week'."""
+    today = datetime.now(ET_TZ).date()
+    return today - timedelta(days=today.weekday()) - timedelta(weeks=KEEP_WEEKS - 1)
 
 
 def iso_week():
@@ -91,7 +127,7 @@ def run_fetcher():
 # ---------------------------------------------------------------- step 2: write rows
 def load_existing():
     rows = supabase.table('papers').select(
-        'arxiv_id,state,score,figures,text_parts,extract_error,extracted_at').execute().data
+        'arxiv_id,state,score,figures,text_parts,extract_error,extracted_at,announced').execute().data
     return {r['arxiv_id']: r for r in rows}
 
 
@@ -101,18 +137,19 @@ def write_rows(kept, existing):
     print("=" * 60)
     added, updated, errors = 0, 0, []
     week = iso_week()
+    listed = listing_date_now().isoformat()
     for p in kept:
         row = {k: p[k] for k in ROW_FIELDS if k in p}
         is_new = p['arxiv_id'] not in existing
         if is_new:
             # only brand-new papers get a state; existing rows keep saved/read/etc.
-            row.update(state='week', week=week)
+            row.update(state='week', week=week, announced=listed)
         try:
             supabase.table('papers').upsert(row).execute()
             if is_new:
                 added += 1
                 existing[p['arxiv_id']] = {'arxiv_id': p['arxiv_id'], 'state': 'week',
-                                           'score': p.get('score', 0)}
+                                           'score': p.get('score', 0), 'announced': listed}
                 print(f"+ {p['arxiv_id']}: {p['title'][:70]}")
             else:
                 updated += 1
@@ -121,6 +158,54 @@ def write_rows(kept, existing):
             print(f"✗ {p['arxiv_id']}: {e}")
     print(f"{added} added, {updated} already present")
     return added, updated, errors
+
+
+# ---------------------------------------------------------------- listing dates + pruning
+def fill_announced(existing):
+    """Give older rows (backfilled/imported) a listing date from their arXiv submission time."""
+    todo = [pid for pid, r in existing.items() if not r.get('announced')]
+    if not todo:
+        return
+    print(f"\nFilling listing dates for {len(todo)} papers")
+    A = "{http://www.w3.org/2005/Atom}"
+    for i in range(0, len(todo), 50):
+        ids = ",".join(todo[i:i + 50])
+        req = urllib.request.Request(f"https://export.arxiv.org/api/query?id_list={ids}&max_results=50",
+                                     headers={"User-Agent": UA})
+        try:
+            root = ET.fromstring(urllib.request.urlopen(req, timeout=60).read())
+        except Exception as e:
+            print(f"  arXiv API failed: {e}"); return
+        for e in root.findall(A + "entry"):
+            pid = e.findtext(A + "id").split("/abs/")[-1].split("v")[0]
+            pub = e.findtext(A + "published")
+            if pid not in existing or not pub:
+                continue
+            d = listing_date_from_submission(datetime.fromisoformat(pub.replace("Z", "+00:00"))).isoformat()
+            supabase.table('papers').update({'announced': d}).eq('arxiv_id', pid).execute()
+            existing[pid]['announced'] = d
+        time.sleep(PDF_PAUSE)
+
+
+def prune_old(existing):
+    """Delete unsaved papers listed before the oldest kept week, with their figures and text."""
+    cutoff = keep_from().isoformat()
+    old = [pid for pid, r in existing.items()
+           if r.get('state') == 'week' and r.get('announced') and r['announced'] < cutoff]
+    print(f"\nPruning unsaved papers listed before {cutoff}: {len(old)}")
+    bucket = supabase.storage.from_('figures')
+    for pid in old:
+        try:
+            files = [f"{pid}/{f['name']}" for f in (bucket.list(pid) or []) if f.get('name')]
+            if files:
+                bucket.remove(files)
+            supabase.table('fulltext').delete().eq('arxiv_id', pid).execute()
+            supabase.table('papers').delete().eq('arxiv_id', pid).eq('state', 'week').execute()
+            existing.pop(pid, None)
+            print(f"- {pid}")
+        except Exception as e:
+            print(f"  could not prune {pid}: {e}")
+    return len(old)
 
 
 # ---------------------------------------------------------------- step 3: extract
@@ -232,6 +317,10 @@ def main():
         else:
             added, updated, errs = write_rows(fetch_data.get('kept', []), existing)
             errors += errs
+
+    fill_announced(existing)
+    if not extract_only:
+        prune_old(existing)
 
     # extraction runs even if the fetch failed, so older papers still get figures
     extracted, errs = run_extraction(existing)
