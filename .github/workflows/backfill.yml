@@ -1,0 +1,33 @@
+name: Backfill Papers
+
+on:
+  workflow_dispatch:
+    inputs:
+      days:
+        description: 'Number of days to backfill'
+        required: false
+        default: '7'
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Run backfill
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: |
+          cd scripts
+          python backfill.py ${{ github.event.inputs.days }}
