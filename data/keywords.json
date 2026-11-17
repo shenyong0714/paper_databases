@@ -1,0 +1,118 @@
+{
+  "announce_types": [
+    "new",
+    "cross"
+  ],
+  "categories": [
+    "cond-mat.supr-con",
+    "cond-mat.str-el",
+    "cond-mat.mes-hall"
+  ],
+  "groups": [
+    {
+      "terms": [
+        "rhombohedral",
+        "abc graphene",
+        "abca",
+        "abcb"
+      ],
+      "w": 3,
+      "why": "NOT the phrase 'rhombohedral graphene' -- a layer word almost always sits between the two, and the exact phrase missed 14 of 31 such papers in his Zotero"
+    },
+    {
+      "terms": [
+        "fractional quantum anomalous hall",
+        "fractional chern insulator",
+        "fqah",
+        "fqahe",
+        "fci"
+      ],
+      "w": 3
+    },
+    {
+      "terms": [
+        "unconventional superconductor",
+        "unconventional superconductivity",
+        "topological superconductor",
+        "topological superconductivity",
+        "chiral superconductor",
+        "chiral superconductivity"
+      ],
+      "w": 3
+    },
+    {
+      "terms": [
+        "majorana",
+        "majorana zero mode",
+        "mzm"
+      ],
+      "w": 3
+    },
+    {
+      "terms": [
+        "wigner crystal",
+        "anomalous hall crystal",
+        "hall crystal"
+      ],
+      "w": 3
+    },
+    {
+      "terms": [
+        "even denominator"
+      ],
+      "w": 3
+    },
+    {
+      "terms": [
+        "non-abelian",
+        "nonabelian"
+      ],
+      "w": 3
+    },
+    {
+      "terms": [
+        "quantum spin hall",
+        "qsh"
+      ],
+      "w": 3
+    },
+    {
+      "terms": [
+        "quantum spin liquid"
+      ],
+      "w": 3
+    },
+    {
+      "terms": [
+        "moir\u00e9",
+        "moire"
+      ],
+      "w": 1
+    },
+    {
+      "terms": [
+        "quantum anomalous hall",
+        "qah"
+      ],
+      "w": 1
+    },
+    {
+      "terms": [
+        "transition metal dichalcogenide",
+        "tmd"
+      ],
+      "w": 1
+    },
+    {
+      "terms": [
+        "high temperature superconductor",
+        "high temperature superconductivity",
+        "room temperature superconductivity"
+      ],
+      "w": 1
+    }
+  ],
+  "min_score": 3,
+  "note": "Single source of truth for digest scoring. The page displays this; the daily task reads it. Groups score ONCE at their weight. Matching: case-insensitive, word boundary in front, s/e/es suffix allowed, spaces and hyphens interchangeable.",
+  "version": "2026-09-18"
+}

@@ -1,0 +1,42 @@
+name: Daily arXiv Update
+
+on:
+  schedule:
+    # Run at 10:00 UTC (06:00 Boston time) Mon-Fri
+    # arXiv RSS updates around 04:00-04:30 UTC
+    - cron: '0 10 * * 1-5'
+  workflow_dispatch:  # Allow manual runs
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: |
+        pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Run arXiv fetcher
+      env:
+        SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+        SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+      run: |
+        cd scripts
+        python run_daily.py
+
+    - name: Commit data snapshot (optional)
+      run: |
+        git config --local user.email "github-actions[bot]@users.noreply.github.com"
+        git config --local user.name "github-actions[bot]"
+        git add data/*.json || true
+        git diff --quiet && git diff --staged --quiet || git commit -m "Daily update: $(date -u +%Y-%m-%d)" || true
+        git push || true

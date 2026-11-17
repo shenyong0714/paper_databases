@@ -1,0 +1,105 @@
+================================================================================
+RESEARCH DESK - FILE COPY INSTRUCTIONS
+================================================================================
+
+All files have been created in Claude's cloud workspace at:
+/tmp/claude-0/-home-claude/51706848-500f-5694-ba61-484bb2860348/scratchpad/paper_databases
+
+You need to copy these files to your local directory:
+/Users/shenyongye/Documents/GitHub/paper_databases
+
+================================================================================
+METHOD: Use Claude's device bridge
+================================================================================
+
+Ask Claude to commit these files to your local directory:
+
+"Copy all files from the scratchpad paper_databases directory to
+/Users/shenyongye/Documents/GitHub/paper_databases"
+
+Or run these commands if Claude provides them.
+
+================================================================================
+FILES TO COPY (15 files total):
+================================================================================
+
+📁 Project Root:
+  ✓ .gitignore
+  ✓ README.md
+  ✓ QUICKSTART.md
+  ✓ requirements.txt
+
+📁 .github/workflows/:
+  ✓ daily-update.yml
+
+📁 data/:
+  ✓ keywords.json
+
+📁 docs/:
+  ✓ SETUP.md
+  ✓ supabase_schema.sql
+
+📁 frontend/:
+  ✓ index.html
+
+📁 scripts/:
+  ✓ digest.py
+  ✓ export_artifact_data.py
+  ✓ extract_figs.py
+  ✓ fetcher.py
+  ✓ import_to_supabase.py
+  ✓ migrate_from_artifact.py
+  ✓ run_daily.py
+
+================================================================================
+AFTER COPYING:
+================================================================================
+
+1. Verify all files are in place:
+   cd /Users/shenyongye/Documents/GitHub/paper_databases
+   ls -la
+
+2. Follow QUICKSTART.md for setup (5 steps, 15 minutes total):
+   - Set up Supabase
+   - Push to GitHub
+   - Configure frontend
+   - Enable GitHub Pages
+   - Test first run
+
+3. Optional: Export data from old artifact
+   - See scripts/export_artifact_data.py for instructions
+
+================================================================================
+QUICK REFERENCE:
+================================================================================
+
+Documentation:
+  📖 QUICKSTART.md   - 15-minute setup guide
+  📖 README.md       - Full documentation
+  📖 docs/SETUP.md   - Detailed step-by-step guide
+
+Key Configuration Files:
+  🔧 data/keywords.json              - Your research keywords
+  🔧 frontend/index.html             - Website (edit Supabase credentials)
+  🔧 .github/workflows/daily-update.yml  - Automation schedule
+
+Setup Scripts:
+  🔨 docs/supabase_schema.sql        - Run in Supabase SQL Editor
+  🔨 scripts/import_to_supabase.py   - Import old data (optional)
+
+================================================================================
+NEXT STEPS:
+================================================================================
+
+Once files are copied:
+1. Read QUICKSTART.md
+2. Set up Supabase (5 min)
+3. Configure GitHub (5 min)
+4. Update frontend/index.html with your Supabase credentials
+5. Push to GitHub and enable Pages
+6. Run first workflow
+
+Your site will be at:
+https://YOUR-USERNAME.github.io/paper_databases/frontend/
+
+================================================================================
