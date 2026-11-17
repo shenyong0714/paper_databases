@@ -2,10 +2,16 @@ name: Daily arXiv Update
 
 on:
   schedule:
-    # Run at 10:00 UTC (06:00 Boston time) Mon-Fri
-    # arXiv RSS updates around 04:00-04:30 UTC
-    - cron: '0 10 * * 1-5'
+    # cron is in UTC. arXiv announces new papers ~20:00 US Eastern the previous evening.
+    # Off-the-hour minutes avoid GitHub's top-of-hour congestion, where scheduled runs get dropped.
+    # Main run: 10:23 UTC Mon-Fri (05:23 EST / 06:23 EDT)
+    - cron: '23 10 * * 1-5'
+    # Backup run: 17:05 UTC Mon-Fri (12:05 EST / 13:05 EDT). Safe to repeat: existing papers are skipped.
+    - cron: '5 17 * * 1-5'
   workflow_dispatch:  # Allow manual runs
+
+permissions:
+  contents: write  # lets the optional snapshot step push
 
 jobs:
   update:
