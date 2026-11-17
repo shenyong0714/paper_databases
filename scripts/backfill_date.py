@@ -70,7 +70,8 @@ def main():
     scripts_dir = Path(__file__).parent
     keywords_file = scripts_dir.parent / "data" / "keywords.json"
     with open(keywords_file) as f:
-        cfg = json.load(f).get("data", json.load(f))
+        data = json.load(f)
+        cfg = data.get("data", data)
 
     groups = [(g["w"], [(t, rx(t)) for t in g["terms"]]) for g in cfg["groups"]]
     categories = cfg['categories']
