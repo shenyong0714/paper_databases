@@ -18,6 +18,10 @@ on:
 permissions:
   contents: write  # lets the optional snapshot step push
 
+concurrency:
+  group: extraction
+  cancel-in-progress: false
+
 jobs:
   update:
     runs-on: ubuntu-latest

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Research Desk → Claude (Paper Desk chat)
 // @namespace    shenyong0714.research-desk
-// @version      1.0.0
+// @version      1.1.0
 // @description  When Research Desk opens the Paper Desk chat with ?rd=<arXiv id>, put that paper (abstract, figure captions, full text) into the message box. You still press Send.
 // @match        https://claude.ai/*
 // @grant        none
@@ -20,7 +20,8 @@
   const params = new URLSearchParams(location.search);
   const id = params.get('rd');
   if (!id) return;
-  if (!/^\d{4}\.\d{4,5}$/.test(id)) { toast(`Research Desk: "${id}" is not an arXiv id`, true); return; }
+  const isArxiv = /^\d{4}\.\d{4,5}$/.test(id);
+  if (!isArxiv && !/^doi:10\.\d{4,9}\/\S+$/.test(id)) { toast(`Research Desk: "${id}" is not a paper id`, true); return; }
 
   // drop ?rd= so a reload doesn't insert the paper twice
   params.delete('rd');
@@ -29,13 +30,13 @@
   run().catch(e => toast('Research Desk: ' + e.message, true));
 
   async function run() {
-    toast(`Research Desk: loading arXiv:${id}…`);
+    toast(`Research Desk: loading ${id}…`);
     const [paper, text] = await Promise.all([getPaper(id), getText(id)]);
     const msg = buildPrompt(paper, text);
     const ed = await waitFor(() => document.querySelector('div.ProseMirror[contenteditable="true"]'), 20000);
     if (!ed) throw new Error('message box not found (are you signed in?)');
     insert(ed, msg);
-    toast(text ? `arXiv:${id} added with full text. Press Send.` : `arXiv:${id} added (no full text yet). Press Send.`);
+    toast(text ? `${id} added with full text. Press Send.` : `${id} added (abstract only). Press Send.`);
   }
 
   async function rest(path) {
@@ -44,12 +45,12 @@
     return r.json();
   }
   async function getPaper(id) {
-    const rows = await rest(`papers?arxiv_id=eq.${id}&select=arxiv_id,title,authors,abstract,cat,matched,figures`);
-    if (!rows.length) throw new Error(`arXiv:${id} is not in Research Desk`);
+    const rows = await rest(`papers?arxiv_id=eq.${encodeURIComponent(id)}&select=arxiv_id,title,authors,abstract,cat,matched,figures,doi,journal,year,url`);
+    if (!rows.length) throw new Error(`${id} is not in Research Desk`);
     return rows[0];
   }
   async function getText(id) {
-    const rows = await rest(`fulltext?arxiv_id=eq.${id}&select=part,text&order=part`);
+    const rows = await rest(`fulltext?arxiv_id=eq.${encodeURIComponent(id)}&select=part,text&order=part`);
     return rows.map(r => r.text).join('');
   }
 
@@ -59,13 +60,15 @@
       `New paper for my Paper Desk. Read it, keep it in mind alongside the other papers in this chat, then answer my questions.`,
       ``,
       `Title: ${p.title}`,
-      `arXiv: https://arxiv.org/abs/${p.arxiv_id}  (${p.cat || ''})`,
+      /^\d{4}\.\d{4,5}$/.test(p.arxiv_id) ? `arXiv: https://arxiv.org/abs/${p.arxiv_id}  (${p.cat || ''})`
+                                         : `Link: ${p.url || 'https://doi.org/' + p.doi}`,
+      p.journal ? `Published: ${p.journal}${p.year ? ' ' + p.year : ''}${p.doi ? '  doi:' + p.doi : ''}` : '',
       `Authors: ${(p.authors || []).join(', ')}`,
       `Matched keywords: ${(p.matched || []).join(', ')}`,
       ``,
       `Abstract:`, p.abstract || '',
       caps ? `\nFigure captions:\n${caps}` : '',
-      full ? `\n===== FULL TEXT =====\n${full}` : `\n(Full text not extracted yet; read the arXiv link above.)`,
+      full ? `\n===== FULL TEXT =====\n${full}` : `\n(Full text not available here; use the link above.)`,
     ].join('\n');
   }
 

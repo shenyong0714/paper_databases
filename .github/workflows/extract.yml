@@ -1,0 +1,28 @@
+name: Extract Figures (frequent)
+
+# Picks up papers added by link (or anything still unextracted) without waiting for the daily run.
+# Cheap when the queue is empty. Off-the-hour minute to avoid GitHub's top-of-hour congestion.
+on:
+  schedule:
+    - cron: '37 */2 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: extraction
+  cancel-in-progress: false
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+    - run: pip install -r requirements.txt
+    - name: Extract
+      env:
+        SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+        SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+      run: python scripts/run_daily.py --extract-only

@@ -143,3 +143,13 @@ CREATE TRIGGER papers_updated_at
 -- 2026-11-17: arXiv listing date (US Eastern) used to group "This week" by day and to prune
 alter table papers add column if not exists announced date;
 create index if not exists papers_announced_idx on papers (announced);
+
+-- 2026-11-17: papers added by link (journal / DOI). Key is the arXiv id when a preprint exists,
+-- otherwise 'doi:<doi>'. Edge function: supabase/functions/add-paper
+alter table papers
+  add column if not exists doi text,
+  add column if not exists journal text,
+  add column if not exists year int,
+  add column if not exists url text,
+  add column if not exists pdf_url text,
+  add column if not exists source text not null default 'digest';

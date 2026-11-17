@@ -12,6 +12,7 @@ Daily arXiv update script for GitHub Actions.
 Run with --extract-only to skip the fetch and only process the extraction queue.
 """
 import os
+import re
 import sys
 import json
 import time
@@ -47,6 +48,8 @@ PDF_PAUSE = 3          # seconds between arXiv PDF downloads (arXiv asks for pol
 TEXT_CHUNK = 60000     # characters per fulltext row
 ROW_FIELDS = ('arxiv_id', 'title', 'abstract', 'authors', 'cat', 'score', 'matched')
 ET_TZ = ZoneInfo('America/New_York')
+ARXIV_ID = re.compile(r'^\d{4}\.\d{4,5}$')
+NO_PDF = 'No PDF available'   # journal paper without an arXiv version or open-access copy: don't retry
 KEEP_WEEKS = 2         # 'This week' keeps the current and the previous week; older unsaved papers are deleted
 
 
@@ -127,7 +130,7 @@ def run_fetcher():
 # ---------------------------------------------------------------- step 2: write rows
 def load_existing():
     rows = supabase.table('papers').select(
-        'arxiv_id,state,score,figures,text_parts,extract_error,extracted_at,announced').execute().data
+        'arxiv_id,state,score,figures,text_parts,extract_error,extracted_at,announced,pdf_url').execute().data
     return {r['arxiv_id']: r for r in rows}
 
 
@@ -163,7 +166,7 @@ def write_rows(kept, existing):
 # ---------------------------------------------------------------- listing dates + pruning
 def fill_announced(existing):
     """Give older rows (backfilled/imported) a listing date from their arXiv submission time."""
-    todo = [pid for pid, r in existing.items() if not r.get('announced')]
+    todo = [pid for pid, r in existing.items() if not r.get('announced') and ARXIV_ID.match(pid)]
     if not todo:
         return
     print(f"\nFilling listing dates for {len(todo)} papers")
@@ -196,7 +199,8 @@ def prune_old(existing):
     bucket = supabase.storage.from_('figures')
     for pid in old:
         try:
-            files = [f"{pid}/{f['name']}" for f in (bucket.list(pid) or []) if f.get('name')]
+            key = storage_key(pid)
+            files = [f"{key}/{f['name']}" for f in (bucket.list(key) or []) if f.get('name')]
             if files:
                 bucket.remove(files)
             supabase.table('fulltext').delete().eq('arxiv_id', pid).execute()
@@ -212,19 +216,35 @@ def prune_old(existing):
 def extraction_queue(existing):
     """Papers never extracted, or whose last attempt failed. Saved papers first."""
     todo = [r for r in existing.values()
-            if not r.get('extracted_at') or r.get('extract_error')]
+            if not r.get('extracted_at')
+            or (r.get('extract_error') and not r['extract_error'].startswith(NO_PDF))]
     todo.sort(key=lambda r: (r.get('state') == 'week', -(r.get('score') or 0)))
     return todo[:MAX_EXTRACT], len(todo)
 
 
-def extract_one(pid):
-    pdir = WORK_DIR / pid
+def storage_key(pid):
+    """Storage-safe folder name ('doi:10.1038/x' -> 'doi_10.1038_x')."""
+    return re.sub(r'[^A-Za-z0-9._-]', '_', pid)
+
+
+def extract_one(row):
+    pid = row['arxiv_id']
+    if ARXIV_ID.match(pid):
+        src = f"https://arxiv.org/pdf/{pid}"
+    elif row.get('pdf_url'):
+        src = row['pdf_url']
+    else:
+        raise RuntimeError(f"{NO_PDF}: no arXiv version or open-access copy found")
+    pdir = WORK_DIR / storage_key(pid)
     shutil.rmtree(pdir, ignore_errors=True)
     pdir.mkdir(parents=True)
-    pdf = pdir / f"{pid}.pdf"
-    req = urllib.request.Request(f"https://arxiv.org/pdf/{pid}", headers={"User-Agent": UA})
+    pdf = pdir / "paper.pdf"
+    req = urllib.request.Request(src, headers={"User-Agent": UA})
     with urllib.request.urlopen(req, timeout=90) as r:
-        pdf.write_bytes(r.read())
+        data = r.read()
+    if not data.startswith(b'%PDF'):
+        raise RuntimeError(f"{NO_PDF}: {src} did not return a PDF")
+    pdf.write_bytes(data)
 
     figs, text = extract_figs.extract(str(pdf), str(pdir))
     text = clean(text)
@@ -232,7 +252,7 @@ def extract_one(pid):
     bucket = supabase.storage.from_('figures')
     out_figs = []
     for f in figs:
-        path = f"{pid}/fig{f['n']:02d}.png"
+        path = f"{storage_key(pid)}/fig{f['n']:02d}.png"
         with open(f['file'], 'rb') as fh:
             bucket.upload(path, fh.read(),
                           file_options={"content-type": "image/png", "upsert": "true"})
@@ -259,14 +279,14 @@ def run_extraction(existing):
         if i:
             time.sleep(PDF_PAUSE)
         try:
-            figs, n_parts = extract_one(pid)
+            figs, n_parts = extract_one(r)
             supabase.table('papers').update({
                 'figures': figs, 'text_parts': n_parts,
                 'extract_error': None, 'extracted_at': now_iso()}).eq('arxiv_id', pid).execute()
             done += 1
             print(f"✓ {pid}: {len(figs)} figures, {n_parts} text parts")
         except Exception as e:
-            msg = f"{type(e).__name__}: {e}"
+            msg = str(e) if str(e).startswith(NO_PDF) else f"{type(e).__name__}: {e}"
             errors.append(f"{pid}: {msg}")
             print(f"✗ {pid}: {msg}")
             try:
@@ -275,7 +295,7 @@ def run_extraction(existing):
             except Exception as e2:
                 print(f"  could not record error: {e2}")
         finally:
-            shutil.rmtree(WORK_DIR / pid, ignore_errors=True)
+            shutil.rmtree(WORK_DIR / storage_key(pid), ignore_errors=True)
     return done, errors
 
 

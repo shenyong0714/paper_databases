@@ -74,6 +74,10 @@ header.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;
 .search{width:100%;margin-bottom:10px;background:var(--surface);border:1px solid var(--line);
   border-radius:6px;padding:8px 11px;font:inherit;font-size:13.5px;color:var(--ink)}
 .search:focus{outline:2px solid var(--accent);outline-offset:-1px}
+.addbox{display:flex;gap:6px;align-items:flex-start}
+.addbox .search{flex:1}
+.addbox .btn{white-space:nowrap;padding:8px 14px}
+.jr{color:var(--accent);font-style:italic}
 .dayhead{background:var(--raise);padding:7px 13px;font-family:var(--f-mono);font-size:11px;
   letter-spacing:.04em;color:var(--muted);display:flex;justify-content:space-between}
 .dayhead.wk{background:var(--paper);color:var(--faint);text-transform:uppercase;letter-spacing:.09em;font-size:10px}
@@ -146,6 +150,10 @@ figcaption b{font-family:var(--f-mono);font-size:11px;color:var(--accent);font-w
 
   <div class="cols">
     <div class="pane list" id="pane-list">
+      <form class="addbox" id="addbox" hidden>
+        <input class="search" id="addlink" type="text" placeholder="Add a paper: paste a journal link, DOI or arXiv id" autocomplete="off">
+        <button class="btn primary" id="addbtn" type="submit">Add</button>
+      </form>
       <input class="search" id="q" type="search" placeholder="Search title, author or arXiv id" autocomplete="off">
       <div class="plist" id="plist"></div>
       <p class="note" id="listnote"></p>
@@ -171,6 +179,10 @@ const hasText = p => +p.text_parts > 0;
 const isReady = p => hasText(p);
 const inArchive = p => p.state !== "week";
 const pid = p => p.arxiv_id;
+const isArxiv = p => /^\d{4}\.\d{4,5}$/.test(p.arxiv_id);
+const absUrl = p => isArxiv(p) ? `https://arxiv.org/abs/${p.arxiv_id}` : (p.url || `https://doi.org/${p.doi}`);
+const pdfUrl = p => isArxiv(p) ? `https://arxiv.org/pdf/${p.arxiv_id}` : p.pdf_url;
+const journalLine = p => p.journal ? `${p.journal}${p.year?" "+p.year:""}` : "";
 const posted = p => {
   const m = /^(\d{2})(\d{2})\.(\d+)$/.exec(String(p.arxiv_id||""));
   return m ? (+m[1])*1e9 + (+m[2])*1e7 + (+m[3]) : -1;
@@ -201,6 +213,7 @@ function render(){
   $("#n-arch").textContent = archRows().length || "";
   for(const t of ["week","arch"])
     $("#tab-"+t).setAttribute("aria-selected", state.tab===t);
+  $("#addbox").hidden = state.tab!=="arch";
 
   const rows = (state.tab==="week" ? weekRows() : archRows()).filter(matchesQ)
     .sort(state.tab==="week"
@@ -237,8 +250,8 @@ function render(){
       <span class="meta">
         ${isReady(p)?`<span class="dot" title="${hasFigs(p)?"figures and text ready":"text ready (no figures)"}"></span>`:""}
         ${!isReady(p)?'<span style="color:var(--gold)">queued</span>':""}
-        <span>${esc(p.cat||"")}</span>
-        <span>${esc(pid(p))}</span>
+        ${journalLine(p)?`<span class="jr">${esc(journalLine(p))}</span>`:`<span>${esc(p.cat||"")}</span>`}
+        <span>${esc(isArxiv(p)?pid(p):(p.doi||""))}</span>
       </span>
       <span class="meta">${(p.matched||[]).slice(0,4).map(k=>`<span class="kw">${esc(k)}</span>`).join("")}</span>
     </span>`;
@@ -252,6 +265,7 @@ function render(){
 
 function figHTML(p){
   if(!hasFigs(p)){
+    if(p.extract_error && p.extract_error.startsWith("No PDF")) return `<p class="empty">No arXiv version or open-access PDF found, so no figures. The abstract and the journal link are saved.</p>`;
     if(p.extract_error) return `<p class="empty">Could not extract this PDF: ${esc(p.extract_error)}</p>`;
     if(hasText(p)) return `<p class="empty">No figures in this PDF.</p>`;
     return `<p class="empty">Queued. The daily update will extract figures.</p>`;
@@ -273,26 +287,28 @@ function renderDetail(){
       <h2>${esc(p.title)}</h2>
       <div class="authors">${esc((p.authors||[]).join(", "))}</div>
       <div class="idline">
-        <a href="https://arxiv.org/abs/${esc(p.arxiv_id)}" target="_blank" rel="noopener">arXiv:${esc(p.arxiv_id)}</a>
-        <span>${esc(p.cat||"")}</span><span>score ${p.score}</span>
+        ${isArxiv(p)?`<a href="https://arxiv.org/abs/${esc(p.arxiv_id)}" target="_blank" rel="noopener">arXiv:${esc(p.arxiv_id)}</a>`:""}
+        ${p.doi?`<a href="https://doi.org/${esc(p.doi)}" target="_blank" rel="noopener">${esc(journalLine(p)||"DOI")}</a>`:""}
+        <span>${esc(p.cat||"")}</span>${p.source==="manual"?"<span>added by link</span>":`<span>score ${p.score}</span>`}
         ${(p.matched||[]).map(k=>`<span class="kw">${esc(k)}</span>`).join(" ")}
       </div>
     </div>
     <p class="abstract">${esc(p.abstract)}</p>
     <div class="actions">
       <button class="btn ${saved?"on":"primary"}" id="save">${saved?"★ Saved":"Save to archive"}</button>
-      <a class="btn" href="https://arxiv.org/pdf/${esc(p.arxiv_id)}" target="_blank" rel="noopener">PDF</a>
+      ${pdfUrl(p)?`<a class="btn" href="${esc(pdfUrl(p))}" target="_blank" rel="noopener">PDF</a>`:""}
+      ${!isArxiv(p)?`<a class="btn" href="${esc(absUrl(p))}" target="_blank" rel="noopener">Journal page</a>`:""}
     </div>
     <div class="sec"><h3>Figures</h3>${figHTML(p)}</div>
     <div class="sec">
       <h3>Ask this paper</h3>
-      ${isReady(p) ? `
+      ${isReady(p) || (p.extract_error||"").startsWith("No PDF") ? `
         <p class="empty" style="padding:6px 0">Opens your Paper Desk chat in Claude with this paper (abstract, figure captions and full text) already in the message box. Just press Send.</p>
         <div class="claude-link">
-          <a href="${CHAT_URL}?rd=${esc(p.arxiv_id)}" target="_blank" rel="noopener" id="ask">Ask in Paper Desk &rarr;</a>
+          <a href="${CHAT_URL}?rd=${encodeURIComponent(p.arxiv_id)}" target="_blank" rel="noopener" id="ask">Ask in Paper Desk &rarr;</a>
         </div>
         <p class="note">Needs the <a href="${USERSCRIPT_URL}" target="_blank" rel="noopener">Research Desk userscript</a>. Without it, the paper is also copied to your clipboard: paste it into the chat.</p>
-        <p class="note" id="asknote">${textCache.has(p.arxiv_id) ? "Full text ready to copy." : "Loading full text…"}</p>` :
+        <p class="note" id="asknote">${!isReady(p) ? "Abstract only (no full text for this paper)." : textCache.has(p.arxiv_id) ? "Full text ready to copy." : "Loading full text…"}</p>` :
         `<p class="empty">Available once the paper's text has been pulled in.</p>`}
     </div>`;
   $("#back")?.addEventListener("click",()=>{ $("#pane-list").classList.remove("hide");
@@ -330,13 +346,14 @@ function paperPrompt(p){
     `New paper for my Paper Desk. Read it, keep it in mind alongside the other papers in this project, then answer my questions.`,
     ``,
     `Title: ${p.title}`,
-    `arXiv: https://arxiv.org/abs/${p.arxiv_id}  (${p.cat||''})`,
+    isArxiv(p) ? `arXiv: https://arxiv.org/abs/${p.arxiv_id}  (${p.cat||''})` : `Link: ${absUrl(p)}`,
+    p.journal ? `Published: ${journalLine(p)}${p.doi?"  doi:"+p.doi:""}` : '',
     `Authors: ${(p.authors||[]).join(', ')}`,
     `Matched keywords: ${(p.matched||[]).join(', ')}`,
     ``,
     `Abstract:`, p.abstract || '',
     caps ? `\nFigure captions:\n${caps}` : '',
-    full ? `\n===== FULL TEXT =====\n${full}` : `\n(Full text not loaded; read the arXiv link above.)`,
+    full ? `\n===== FULL TEXT =====\n${full}` : `\n(Full text not available here; use the link above.)`,
   ].join('\n');
 }
 
@@ -368,6 +385,28 @@ async function toggleSave(p){
 }
 
 let noteTimer;
+// ---------- add a published paper (journal link / DOI / arXiv) straight into the Archive
+async function addByLink(ev){
+  ev.preventDefault();
+  const inp=$("#addlink"), btn=$("#addbtn"), link=inp.value.trim();
+  if(!link) return;
+  btn.disabled=true; btn.textContent="Adding…";
+  try{
+    const { data, error } = await supabase.functions.invoke('add-paper', { body:{ link } });
+    let msg = data?.error;
+    if(error && !msg){ try{ msg=(await error.context.json()).error; }catch(_){ msg=error.message; } }
+    if(msg) throw new Error(msg);
+    const p = data.paper;
+    state.papers = state.papers.filter(x=>pid(x)!==pid(p)).concat([p]);
+    state.tab="arch"; state.sel=pid(p); inp.value="";
+    render(); renderDetail();
+    note(data.existed ? "Already in your desk: moved to Archive." :
+         isArxiv(p) || p.pdf_url ? "Added to Archive. Figures and full text arrive with the next extraction run (within ~2 hours)."
+                                 : "Added to Archive (no open PDF found, so abstract only).");
+  }catch(e){ note(`Could not add: ${e.message}`, true); }
+  finally{ btn.disabled=false; btn.textContent="Add"; }
+}
+
 function note(msg, bad){
   let el = document.getElementById("toast");
   if(!el){ el = document.createElement("div"); el.id="toast"; document.body.appendChild(el); }
@@ -379,6 +418,7 @@ function note(msg, bad){
 }
 
 $("#q").addEventListener("input", e=>{ state.q=e.target.value; render(); });
+$("#addbox").addEventListener("submit", addByLink);
 $("#tab-week").onclick=()=>{state.tab="week";render();};
 $("#tab-arch").onclick=()=>{state.tab="arch";render();};
 
