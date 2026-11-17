@@ -50,6 +50,11 @@ def now_iso():
     return datetime.now(timezone.utc).isoformat()
 
 
+def clean(s):
+    # Postgres text cannot hold NUL; some PDFs emit it in extracted text
+    return (s or '').replace('\x00', '')
+
+
 def iso_week():
     y, w, _ = datetime.now(timezone.utc).isocalendar()
     return f"{y}-W{w:02d}"
@@ -137,6 +142,7 @@ def extract_one(pid):
         pdf.write_bytes(r.read())
 
     figs, text = extract_figs.extract(str(pdf), str(pdir))
+    text = clean(text)
 
     bucket = supabase.storage.from_('figures')
     out_figs = []
@@ -146,7 +152,7 @@ def extract_one(pid):
             bucket.upload(path, fh.read(),
                           file_options={"content-type": "image/png", "upsert": "true"})
         url = bucket.get_public_url(path).rstrip('?')
-        out_figs.append({"n": f['n'], "page": f['page'], "caption": f['caption'], "url": url})
+        out_figs.append({"n": f['n'], "page": f['page'], "caption": clean(f['caption']), "url": url})
 
     parts = [text[i:i + TEXT_CHUNK] for i in range(0, len(text), TEXT_CHUNK)] if text.strip() else []
     for k, chunk in enumerate(parts):
