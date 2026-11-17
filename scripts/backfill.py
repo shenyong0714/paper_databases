@@ -95,11 +95,10 @@ def main():
                 'title': paper['title'],
                 'abstract': paper['abstract'],
                 'authors': paper['authors'],
-                'category': paper['cat'],
+                'cat': paper['cat'],
                 'score': paper['score'],
-                'matched_terms': paper['matched'],
-                'state': 'week',
-                'pdf_url': f"https://arxiv.org/pdf/{paper['arxiv_id']}.pdf"
+                'matched': paper['matched'],
+                'state': 'week'
             }
 
             # Insert paper
