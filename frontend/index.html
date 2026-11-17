@@ -177,7 +177,8 @@ function render(){
   const rows = state.papers.filter(p => state.tab==="week" ? !inArchive(p) : inArchive(p))
     .sort(state.tab==="week"
       ? (a,b)=> (posted(b)-posted(a)) || (b.score-a.score) || a.title.localeCompare(b.title)
-      : (a,b)=> (b.score-a.score) || a.title.localeCompare(b.title));
+      // archive: most recently saved first
+      : (a,b)=> ((Date.parse(b.saved_at)||0)-(Date.parse(a.saved_at)||0)) || (posted(b)-posted(a)));
 
   const list = $("#plist");
   list.innerHTML = rows.length ? "" :

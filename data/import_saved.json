@@ -1,0 +1,145 @@
+{
+ "source": "old Research Desk artifact (saved papers), migrated 2026-11-17",
+ "papers": [
+  {
+   "arxiv_id": "2609.19283",
+   "saved_at": "2026-09-21T16:48:33.196Z",
+   "score": 7,
+   "matched": [
+    "rhombohedral",
+    "chiral superconductivity",
+    "transition metal dichalcogenide"
+   ],
+   "week": "2026-W38",
+   "cat": "cond-mat.supr-con"
+  },
+  {
+   "arxiv_id": "2609.30365",
+   "saved_at": "2026-09-28T14:13:34.643Z",
+   "score": 6,
+   "matched": [
+    "rhombohedral",
+    "topological superconductivity"
+   ],
+   "week": "2026-W40",
+   "cat": "cond-mat.supr-con"
+  },
+  {
+   "arxiv_id": "2609.30791",
+   "saved_at": "2026-09-28T14:12:36.566Z",
+   "score": 3,
+   "matched": [
+    "topological superconductivity"
+   ],
+   "week": "2026-W40",
+   "cat": "cond-mat.supr-con"
+  },
+  {
+   "arxiv_id": "2609.31839",
+   "saved_at": "2026-10-01T23:49:01.453Z",
+   "score": 9,
+   "matched": [
+    "rhombohedral",
+    "fractional chern insulator",
+    "chiral superconductor"
+   ],
+   "week": "2026-W40",
+   "cat": "cond-mat.str-el"
+  },
+  {
+   "arxiv_id": "2609.39879",
+   "saved_at": "2026-10-01T23:45:18.993Z",
+   "score": 3,
+   "matched": [
+    "non-abelian"
+   ],
+   "week": "2026-W40",
+   "cat": "quant-ph"
+  },
+  {
+   "arxiv_id": "2610.10710",
+   "saved_at": "2026-10-16T04:46:03.215Z",
+   "score": 6,
+   "matched": [
+    "rhombohedral",
+    "wigner crystal"
+   ],
+   "week": "2026-W42",
+   "cat": "cond-mat.str-el"
+  },
+  {
+   "arxiv_id": "2610.14401",
+   "saved_at": "2026-10-16T04:44:55.122Z",
+   "score": 3,
+   "matched": [
+    "unconventional superconductor"
+   ],
+   "week": "2026-W42",
+   "cat": "cond-mat.supr-con"
+  },
+  {
+   "arxiv_id": "2610.18286",
+   "saved_at": "2026-10-16T04:44:07.390Z",
+   "score": 3,
+   "matched": [
+    "rhombohedral"
+   ],
+   "week": "2026-W42",
+   "cat": "cond-mat.supr-con"
+  },
+  {
+   "arxiv_id": "2610.20553",
+   "saved_at": "2026-10-16T04:41:54.741Z",
+   "score": 7,
+   "matched": [
+    "rhombohedral",
+    "wigner crystal",
+    "transition metal dichalcogenide"
+   ],
+   "week": "2026-W42",
+   "cat": "cond-mat.str-el"
+  },
+  {
+   "arxiv_id": "2610.21875",
+   "saved_at": "2026-10-16T15:35:33.552Z",
+   "score": 3,
+   "matched": [
+    "wigner crystal"
+   ],
+   "week": "2026-W42",
+   "cat": "cond-mat.mes-hall"
+  },
+  {
+   "arxiv_id": "2610.22348",
+   "saved_at": "2026-10-16T15:35:13.546Z",
+   "score": 3,
+   "matched": [
+    "fractional chern insulator"
+   ],
+   "week": "2026-W42",
+   "cat": "cond-mat.mes-hall"
+  },
+  {
+   "arxiv_id": "2611.10117",
+   "saved_at": "2026-11-10T16:21:12.621Z",
+   "score": 6,
+   "matched": [
+    "rhombohedral",
+    "wigner crystal"
+   ],
+   "week": "2026-W46",
+   "cat": "cond-mat.str-el"
+  },
+  {
+   "arxiv_id": "2611.12281",
+   "saved_at": "2026-11-10T16:19:41.604Z",
+   "score": 6,
+   "matched": [
+    "rhombohedral",
+    "unconventional superconductivity"
+   ],
+   "week": "2026-W46",
+   "cat": "cond-mat.mes-hall"
+  }
+ ]
+}
