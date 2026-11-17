@@ -242,11 +242,11 @@ function renderDetail(){
     <div class="sec">
       <h3>Ask this paper</h3>
       ${isReady(p) ? `
-        <p class="empty" style="padding:6px 0">Copies this paper (abstract, figure captions and full text) and opens the July project in Claude.
-        Start a new chat there and paste. Every paper's chat lives in July, so Claude can connect them over time.</p>
+        <p class="empty" style="padding:6px 0">Opens your Paper Desk chat in Claude with this paper (abstract, figure captions and full text) already in the message box. Just press Send.</p>
         <div class="claude-link">
-          <a href="${JULY_URL}" target="_blank" rel="noopener" id="ask">Copy &amp; open in July &rarr;</a>
+          <a href="${CHAT_URL}?rd=${esc(p.arxiv_id)}" target="_blank" rel="noopener" id="ask">Ask in Paper Desk &rarr;</a>
         </div>
+        <p class="note">Needs the <a href="${USERSCRIPT_URL}" target="_blank" rel="noopener">Research Desk userscript</a>. Without it, the paper is also copied to your clipboard: paste it into the chat.</p>
         <p class="note" id="asknote">${textCache.has(p.arxiv_id) ? "Full text ready to copy." : "Loading full text…"}</p>` :
         `<p class="empty">Available once the paper's text has been pulled in.</p>`}
     </div>`;
@@ -263,7 +263,9 @@ function renderDetail(){
 }
 
 // ---------- Ask in Claude: copy the paper, open the July project ----------
-const JULY_URL = 'https://claude.ai/project/01a0b155-d37a-74ce-8ed7-a9500b47a4c2';
+// the fixed "Paper Desk" chat inside the July project
+const CHAT_URL = 'https://claude.ai/chat/ade4ac9e-1aa7-4ae2-a546-c38078c6aa14';
+const USERSCRIPT_URL = 'https://shenyong0714.github.io/paper_databases/userscript/research-desk-claude.user.js';
 const textCache = new Map();   // arxiv_id -> full text (prefetched so the click can copy at once)
 
 async function loadText(p){
@@ -297,8 +299,7 @@ function askInJuly(p){
   // no await before the copy: the browser only allows clipboard writes during the click itself
   const txt = paperPrompt(p);
   navigator.clipboard.writeText(txt).then(
-    ()=>note(textCache.has(p.arxiv_id) ? 'Copied with full text. Start a new chat in July and paste.'
-                                        : 'Copied (abstract only). Start a new chat in July and paste.'),
+    ()=>note('Opening Paper Desk… (also copied to clipboard as a backup)'),
     e=>note(`Could not copy: ${e.message}`, true));
   // the link itself opens July in a new tab
 }
