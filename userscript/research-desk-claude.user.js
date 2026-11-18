@@ -1,10 +1,11 @@
 // ==UserScript==
 // @name         Research Desk → Claude (Paper Desk chat)
 // @namespace    shenyong0714.research-desk
-// @version      1.1.0
+// @version      1.2.0
 // @description  When Research Desk opens the Paper Desk chat with ?rd=<arXiv id>, put that paper (abstract, figure captions, full text) into the message box. You still press Send.
 // @match        https://claude.ai/*
-// @grant        none
+// @grant        GM_getValue
+// @grant        GM_setValue
 // @run-at       document-idle
 // @downloadURL  https://shenyong0714.github.io/paper_databases/userscript/research-desk-claude.user.js
 // @updateURL    https://shenyong0714.github.io/paper_databases/userscript/research-desk-claude.user.js
@@ -13,7 +14,8 @@
 (function () {
   'use strict';
 
-  // Public, read-only connection (same anon key the Research Desk page uses)
+  // The desk's database only answers its signed-in owner. This script reads one paper at a
+  // time through ask_paper() with a separate Ask key, asked for once and kept in the script's storage.
   const SUPABASE_URL = 'https://aleirqepbpkelpujixrb.supabase.co';
   const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFsZWlycWVwYnBrZWxwdWppeHJiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQ4ODY1NjUsImV4cCI6MjExMDQ2MjU2NX0.XZVVIvRo7CeZhnzTSXgPLfV28GBVrI1B5jwByEym6Zg';
 
@@ -31,7 +33,7 @@
 
   async function run() {
     toast(`Research Desk: loading ${id}…`);
-    const [paper, text] = await Promise.all([getPaper(id), getText(id)]);
+    const { paper, text } = await askPaper(id);
     const msg = buildPrompt(paper, text);
     const ed = await waitFor(() => document.querySelector('div.ProseMirror[contenteditable="true"]'), 20000);
     if (!ed) throw new Error('message box not found (are you signed in?)');
@@ -39,19 +41,32 @@
     toast(text ? `${id} added with full text. Press Send.` : `${id} added (abstract only). Press Send.`);
   }
 
-  async function rest(path) {
-    const r = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, { headers: { apikey: ANON, Authorization: `Bearer ${ANON}` } });
-    if (!r.ok) throw new Error(`database ${r.status}`);
-    return r.json();
+  function askKey(force) {
+    // Tampermonkey storage when available (Safari's Userscripts lacks the GM_ API): fall back to localStorage
+    const get = () => (typeof GM_getValue === 'function' ? GM_getValue('askKey', '') : localStorage.getItem('rdAskKey') || '');
+    const set = (v) => (typeof GM_setValue === 'function' ? GM_setValue('askKey', v) : localStorage.setItem('rdAskKey', v));
+    let k = get();
+    if (!k || force) {
+      k = (prompt(force ? 'Research Desk: that Ask key was not accepted. Paste the Ask key again:'
+                        : 'Research Desk: paste your Ask key (asked once on this browser):') || '').trim();
+      if (!k) throw new Error('no Ask key');
+      set(k);
+    }
+    return k;
   }
-  async function getPaper(id) {
-    const rows = await rest(`papers?arxiv_id=eq.${encodeURIComponent(id)}&select=arxiv_id,title,authors,abstract,cat,matched,figures,doi,journal,year,url`);
-    if (!rows.length) throw new Error(`${id} is not in Research Desk`);
-    return rows[0];
-  }
-  async function getText(id) {
-    const rows = await rest(`fulltext?arxiv_id=eq.${encodeURIComponent(id)}&select=part,text&order=part`);
-    return rows.map(r => r.text).join('');
+  async function askPaper(id, retry) {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/ask_paper`, {
+      method: 'POST',
+      headers: { apikey: ANON, Authorization: `Bearer ${ANON}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ p_id: id, p_key: askKey(retry) }),
+    });
+    const body = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      if (/invalid key/.test(body.message || '') && !retry) return askPaper(id, true);
+      throw new Error(body.message || `database ${r.status}`);
+    }
+    if (!body.paper) throw new Error(`${id} is not in Research Desk`);
+    return { paper: body.paper, text: body.text || '' };
   }
 
   function buildPrompt(p, full) {

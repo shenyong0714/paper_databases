@@ -153,3 +153,8 @@ alter table papers
   add column if not exists url text,
   add column if not exists pdf_url text,
   add column if not exists source text not null default 'digest';
+
+-- 2026-11-17: locked to the owner's account (see migration lock_to_owner in Supabase):
+-- is_owner() = auth.uid() of the owner; owner-only select/update policies on papers, fulltext,
+-- runs, qa, library; ask_paper(p_id, p_key) security-definer RPC for the Ask userscript,
+-- key hash in app_keys (RLS on, no policies). Pipeline + add-paper use the service role.

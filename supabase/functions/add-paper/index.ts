@@ -4,6 +4,7 @@
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
 const UA = "research-desk/1.0 (+https://github.com/shenyong0714/paper_databases)";
+const OWNER = "d19119ba-8d70-4160-a24c-f41ed233d13c";   // only this account may add papers
 const cors = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -158,13 +159,18 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") return json({ error: "POST only" }, 405);
   try {
+    // verify_jwt only proves the token is valid (the public anon key is too): require the owner's session
+    const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const token = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+    const { data: auth } = await sb.auth.getUser(token);
+    if (auth?.user?.id !== OWNER) return json({ error: "Please sign in to add papers" }, 401);
+
     const { link, dry } = await req.json();
     if (typeof link !== "string" || !link.trim() || link.length > 2000) return json({ error: "Paste a link or DOI" }, 400);
 
     const m = await resolve(link);
     const id = m.arxiv || `doi:${m.doi!.toLowerCase()}`;
     if (dry) return json({ id, meta: m });               // preview only, nothing written
-    const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
     const now = new Date().toISOString();
 
     const { data: old } = await sb.from("papers").select("arxiv_id,state,doi,journal").eq("arxiv_id", id).maybeSingle();
