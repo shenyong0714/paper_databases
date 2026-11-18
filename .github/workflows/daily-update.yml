@@ -2,12 +2,11 @@ name: Daily arXiv Update
 
 on:
   schedule:
-    # cron is in UTC. arXiv announces new papers ~20:00 US Eastern the previous evening.
-    # Off-the-hour minutes avoid GitHub's top-of-hour congestion, where scheduled runs get dropped.
-    # Main run: 10:23 UTC Mon-Fri (05:23 EST / 06:23 EDT)
-    - cron: '23 10 * * 1-5'
-    # Backup run: 17:05 UTC Mon-Fri (12:05 EST / 13:05 EDT). Safe to repeat: existing papers are skipped.
-    - cron: '5 17 * * 1-5'
+    # cron is in UTC. arXiv's RSS for the day is rebuilt ~05:00-09:00 UTC.
+    # GitHub delays scheduled runs by up to several hours and sometimes drops them, so this
+    # runs several times a day (like the email digest repo). Repeats are harmless: papers
+    # already in the database are skipped. Off-the-hour minute avoids top-of-hour congestion.
+    - cron: '17 6,9,12,15,18,21 * * 1-5'
   workflow_dispatch:  # Allow manual runs
     inputs:
       extract_only:

@@ -315,6 +315,11 @@ def record_run(fetch_data, added, updated, extracted, errors):
         'errors': errors,
     }
     try:
+        # several runs a day share one row: add to what earlier runs today recorded
+        prev = supabase.table('runs').select('added,extracted,updated').eq('date', rec['date']).execute().data
+        if prev:
+            for k in ('added', 'extracted'):
+                rec[k] += prev[0].get(k) or 0
         supabase.table('runs').upsert(rec).execute()
         print(f"\n✓ Run recorded: {added} added, {extracted} extracted, {len(errors)} errors")
     except Exception as e:
