@@ -131,16 +131,38 @@ figcaption b{font-family:var(--f-mono);font-size:11px;color:var(--accent);font-w
 .claude-link a{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;
   background:var(--accent);color:#fff;border-radius:6px;text-decoration:none;font-size:13px}
 .claude-link a:hover{opacity:.9}
+.gate{max-width:360px;margin:12vh auto;padding:28px 26px;background:var(--surface);
+  border:1px solid var(--line);border-radius:10px}
+.gate h1{font-size:22px;margin:0 0 4px}
+.gate p{color:var(--muted);font-size:13px;margin:0 0 18px}
+.gate input{display:block;width:100%;margin-bottom:10px}
+.gate .btn{width:100%;justify-content:center;padding:9px}
+.gate .switch{margin-top:14px;font-size:12.5px;color:var(--muted)}
+.gate .switch a{color:var(--accent);cursor:pointer}
+.gate .msg{min-height:18px;font-size:12.5px;margin-top:10px}
+.signout{background:none;border:0;color:var(--faint);font:inherit;font-size:12px;cursor:pointer;padding:0;margin-left:10px}
+.signout:hover{color:var(--ink)}
 </style>
 </head>
 <body>
 
-<div class="shell">
+<form class="gate" id="gate" hidden>
+  <h1>Research Desk</h1>
+  <p id="gate-sub">Sign in to continue.</p>
+  <input class="search" id="email" type="email" placeholder="Email" autocomplete="username" required>
+  <input class="search" id="pw" type="password" placeholder="Password" autocomplete="current-password" required minlength="8">
+  <button class="btn primary" id="gate-btn" type="submit">Sign in</button>
+  <div class="msg" id="gate-msg"></div>
+  <div class="switch" id="gate-switch">First time here? <a id="to-signup">Create the account</a></div>
+</form>
+
+<div class="shell" id="shell" hidden>
   <header class="top">
     <div class="brand">
       <h1>Research Desk</h1>
       <span class="sub">cond-mat · supr-con / str-el / mes-hall</span>
       <span class="sub" id="runstat"></span>
+      <button class="signout" id="signout" title="Sign out">Sign out</button>
     </div>
     <div class="tabs" role="tablist">
       <button class="tab" role="tab" id="tab-week" aria-selected="true">This week <span class="n" id="n-week"></span></button>
@@ -422,7 +444,37 @@ $("#addbox").addEventListener("submit", addByLink);
 $("#tab-week").onclick=()=>{state.tab="week";render();};
 $("#tab-arch").onclick=()=>{state.tab="arch";render();};
 
-(async function boot(){
+// ---------- sign-in gate: the database only answers the signed-in owner
+let started = false, signupMode = false;
+function showGate(on){ $("#gate").hidden=!on; $("#shell").hidden=on; }
+function toggleSignup(){
+  signupMode = !signupMode;
+  $("#gate-sub").textContent = signupMode ? "Create the owner account (once). You'll get a confirmation email." : "Sign in to continue.";
+  $("#gate-btn").textContent = signupMode ? "Create account" : "Sign in";
+  $("#pw").autocomplete = signupMode ? "new-password" : "current-password";
+  $("#gate-switch").innerHTML = signupMode ? 'Have an account? <a id="to-signup">Sign in</a>' : 'First time here? <a id="to-signup">Create the account</a>';
+  $("#to-signup").onclick = toggleSignup;
+}
+$("#to-signup").onclick = toggleSignup;
+$("#gate").addEventListener("submit", async e=>{
+  e.preventDefault();
+  const email=$("#email").value.trim(), password=$("#pw").value, msg=$("#gate-msg"), btn=$("#gate-btn");
+  btn.disabled=true; msg.style.color="var(--muted)"; msg.textContent= signupMode ? "Creating…" : "Signing in…";
+  const { data, error } = signupMode
+    ? await supabase.auth.signUp({ email, password, options:{ emailRedirectTo: location.origin + location.pathname } })
+    : await supabase.auth.signInWithPassword({ email, password });
+  btn.disabled=false;
+  if(error){ msg.style.color="var(--bad)"; msg.textContent=error.message; return; }
+  if(signupMode && !data.session){ msg.textContent="Check your email and click the confirmation link, then sign in here."; return; }
+  msg.textContent="";
+});
+$("#signout").onclick = async ()=>{ await supabase.auth.signOut(); location.reload(); };
+supabase.auth.onAuthStateChange((_ev, session)=>{
+  if(session){ showGate(false); if(!started){ started=true; boot(); } }
+  else showGate(true);
+});
+
+async function boot(){
   render();
 
   try{
@@ -466,7 +518,7 @@ $("#tab-arch").onclick=()=>{state.tab="arch";render();};
     $("#listnote").textContent = "Could not load papers: " + e.message;
     console.error(e);
   }
-})();
+}
 </script>
 
 </body>
