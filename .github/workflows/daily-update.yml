@@ -2,11 +2,12 @@ name: Daily arXiv Update
 
 on:
   schedule:
-    # cron is in UTC. arXiv's RSS for the day is rebuilt ~05:00-09:00 UTC.
-    # GitHub delays scheduled runs by up to several hours and sometimes drops them, so this
-    # runs several times a day (like the email digest repo). Repeats are harmless: papers
-    # already in the database are skipped. Off-the-hour minute avoids top-of-hour congestion.
-    - cron: '17 6,9,12,15,18,21 * * 1-5'
+    # cron is in UTC. Same three times as the arxiv-digest email repo. GitHub often runs
+    # scheduled jobs late or drops one, so three a day make sure one lands each morning.
+    # Repeats are harmless: papers already in the database are skipped.
+    - cron: '30 5 * * *'    # 05:30 UTC
+    - cron: '30 13 * * *'   # 13:30 UTC
+    - cron: '30 21 * * *'   # 21:30 UTC
   workflow_dispatch:  # Allow manual runs
     inputs:
       extract_only:
