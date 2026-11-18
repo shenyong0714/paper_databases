@@ -11,13 +11,15 @@
   "groups": [
     {
       "terms": [
-        "rhombohedral",
+        "rhombohedral graphene",
         "abc graphene",
         "abca",
         "abcb"
       ],
       "w": 3,
-      "why": "NOT the phrase 'rhombohedral graphene' -- a layer word almost always sits between the two, and the exact phrase missed 14 of 31 such papers in his Zotero"
+      "why": "Matches rhombohedral ... graphene with up to 3 words between (a layer word usually sits there: pentalayer, ABC-stacked, N-layer). The bare word rhombohedral was used before and also caught rhombohedral TMDs and graphite.",
+      "name": "Rhombohedral graphene",
+      "gap": 3
     },
     {
       "terms": [
@@ -84,7 +86,7 @@
     },
     {
       "terms": [
-        "moir\u00e9",
+        "moiré",
         "moire"
       ],
       "w": 1
@@ -113,6 +115,6 @@
     }
   ],
   "min_score": 3,
-  "note": "Single source of truth for digest scoring. The page displays this; the daily task reads it. Groups score ONCE at their weight. Matching: case-insensitive, word boundary in front, s/e/es suffix allowed, spaces and hyphens interchangeable.",
+  "note": "Fallback only: the live config is the 'keywords' row of the Supabase settings table, edited on the Keywords page. Groups score once at their weight; disabled groups are skipped; gap = words allowed between a term's words.",
   "version": "2026-09-18"
 }

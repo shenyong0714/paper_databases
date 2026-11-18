@@ -8,8 +8,13 @@ VERSION = 1
 cfg = json.load(open(sys.argv[1])); out = sys.argv[2]
 cfg = cfg.get("data", cfg)
 A = "{http://www.w3.org/2005/Atom}"; AX = "{http://arxiv.org/schemas/atom}"; DC = "{http://purl.org/dc/elements/1.1/}"
-def rx(t): return re.compile(r"\b" + r"[\s\-]*".join(re.escape(w) for w in re.split(r"[\s\-]+", t)) + r"(?:s|e|es)?\b", re.I)
-groups = [(g["w"], [(t, rx(t)) for t in g["terms"]]) for g in cfg["groups"] if g.get("enabled", True) and g.get("terms")]
+def rx(t, gap=0):
+    # gap > 0: up to `gap` other words may sit between the term's words
+    # ("rhombohedral graphene" with gap 3 also matches "rhombohedral-stacked pentalayer graphene")
+    sep = r"(?:[\s\-]+[^\s\-]+){0,%d}?[\s\-]+" % gap if gap else r"[\s\-]*"
+    return re.compile(r"\b" + sep.join(re.escape(w) for w in re.split(r"[\s\-]+", t)) + r"(?:s|e|es)?\b", re.I)
+groups = [(g["w"], [(t, rx(t, int(g.get("gap") or 0))) for t in g["terms"]])
+          for g in cfg["groups"] if g.get("enabled", True) and g.get("terms")]
 ents = {}; ok = []; bad = []; raw = 0; types = collections.Counter(); feed_updated = {}
 for i, cat in enumerate(cfg["categories"]):
     if i: time.sleep(3)

@@ -456,6 +456,12 @@ async function saveKw(msg){
   note(msg + " Takes effect from the next run."); return true;
 }
 const gName = g => g.name || g.terms?.[0] || "Untitled";
+function gapNote(g){
+  const n = +g.gap || 0, multi = (g.terms||[]).find(t => /[\s-]/.test(t.trim()));
+  if(!n || !multi) return "";
+  const w = multi.trim().split(/[\s-]+/);
+  return `<br>“${esc(multi)}” also matches “${esc(w.join(" … "))}” with up to ${n} word${n>1?"s":""} in each gap.`;
+}
 const minScore = () => kw.cfg?.min_score ?? 3;
 
 function kwCard(g, i){
@@ -474,7 +480,8 @@ function kwCard(g, i){
     <div class="kterms">${(g.terms||[]).map(t=>`<span class="kterm">"${esc(t)}"</span>`).join("")}</div>
     <div class="kexp">${core
       ? "Core: any one of these terms in the title or abstract is enough on its own."
-      : `Supporting: worth ${g.w} point${g.w>1?"s":""}; a paper needs ${minScore()} points, so it only counts together with other filters.`}</div>
+      : `Supporting: worth ${g.w} point${g.w>1?"s":""}; a paper needs ${minScore()} points, so it only counts together with other filters.`}
+      ${gapNote(g)}</div>
   </div>`;
 }
 function kwForm(g, i){
@@ -483,6 +490,8 @@ function kwForm(g, i){
     <label>Name<input class="search" name="name" value="${esc(g?.name||"")}" placeholder="e.g. Rhombohedral graphene"></label>
     <label>Terms, separated by commas (synonyms; any one matches)
       <input class="search" name="terms" required value="${esc((g?.terms||[]).join(", "))}" placeholder="rhombohedral, abc graphene"></label>
+    <label>Words allowed between the words of a term (0 = exact phrase)
+      <select name="gap">${[0,1,2,3,4,5].map(n=>`<option value="${n}" ${(+g?.gap||0)===n?"selected":""}>${n}</option>`).join("")}</select></label>
     <label>Type
       <select name="w">
         <option value="core" ${core?"selected":""}>Core: one match is enough</option>
@@ -533,7 +542,9 @@ $("#kwpane").addEventListener("submit", async e=>{
   const w = fd.get("w")==="core" ? minScore() : 1, name=String(fd.get("name")).trim();
   const i=f.dataset.i, isNew = i==="new";
   const g = isNew ? { enabled:true } : kw.cfg.groups[+i];
+  const gap = +fd.get("gap") || 0;
   Object.assign(g, { terms, w }); if(name) g.name=name; else delete g.name;
+  if(gap) g.gap = gap; else delete g.gap;
   if(isNew) kw.cfg.groups.push(g);
   kw.edit=null; renderKw();
   await saveKw(isNew ? `Added “${gName(g)}”.` : `Saved “${gName(g)}”.`); renderKw();
