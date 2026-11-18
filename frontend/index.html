@@ -140,6 +140,32 @@ figcaption b{font-family:var(--f-mono);font-size:11px;color:var(--accent);font-w
 .gate .switch{margin-top:14px;font-size:12.5px;color:var(--muted)}
 .gate .switch a{color:var(--accent);cursor:pointer}
 .gate .msg{min-height:18px;font-size:12.5px;margin-top:10px}
+.kwpage{max-width:860px;margin:26px auto 0}
+.kw-head{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.kw-head h2{font-family:var(--f-mono);font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.kw-lede{color:var(--muted);font-size:13.5px;margin:10px 0 18px}
+.kw-sec{font-family:var(--f-mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);margin:20px 0 8px}
+.kcard{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px 16px;margin-bottom:10px}
+.kcard.off{opacity:.55}
+.krow{display:flex;align-items:center;gap:12px}
+.krow h3{font-size:15px;font-weight:600;flex:1;min-width:0}
+.kact{background:none;border:0;color:var(--muted);font:inherit;font-size:13px;cursor:pointer;padding:2px 6px}
+.kact:hover{color:var(--ink)} .kact.bad{color:var(--bad)}
+.kterms{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 8px}
+.kterm{font-family:var(--f-mono);font-size:12.5px;background:var(--raise);border-radius:4px;padding:3px 8px}
+.kexp{font-size:12.5px;color:var(--muted)}
+.kw-badge{font-family:var(--f-mono);font-size:10.5px;padding:2px 7px;border-radius:10px;background:var(--accent-soft);color:var(--accent)}
+.kw-badge.sup{background:var(--raise);color:var(--muted)}
+.tgl{position:relative;width:36px;height:20px;flex:none;cursor:pointer}
+.tgl input{opacity:0;width:0;height:0;position:absolute}
+.tgl span{position:absolute;inset:0;border-radius:20px;background:var(--line);transition:.15s}
+.tgl span::after{content:"";position:absolute;width:14px;height:14px;left:3px;top:3px;border-radius:50%;background:#fff;transition:.15s}
+.tgl input:checked+span{background:var(--accent)}
+.tgl input:checked+span::after{transform:translateX(16px)}
+.kform{display:grid;gap:10px;margin-top:4px}
+.kform label{font-size:12px;color:var(--muted);display:grid;gap:4px}
+.kform .row{display:flex;gap:8px;justify-content:flex-end}
+.kform select{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:7px 9px;font:inherit;font-size:13px;color:var(--ink)}
 .signout{background:none;border:0;color:var(--faint);font:inherit;font-size:12px;cursor:pointer;padding:0;margin-left:10px}
 .signout:hover{color:var(--ink)}
 </style>
@@ -167,10 +193,13 @@ figcaption b{font-family:var(--f-mono);font-size:11px;color:var(--accent);font-w
     <div class="tabs" role="tablist">
       <button class="tab" role="tab" id="tab-week" aria-selected="true">This week <span class="n" id="n-week"></span></button>
       <button class="tab" role="tab" id="tab-arch" aria-selected="false">Archive <span class="n" id="n-arch"></span></button>
+      <button class="tab" role="tab" id="tab-kw" aria-selected="false">Keywords <span class="n" id="n-kw"></span></button>
     </div>
   </header>
 
-  <div class="cols">
+  <section class="kwpage" id="kwpane" hidden></section>
+
+  <div class="cols" id="cols">
     <div class="pane list" id="pane-list">
       <form class="addbox" id="addbox" hidden>
         <input class="search" id="addlink" type="text" placeholder="Add a paper: paste a journal link, DOI or arXiv id" autocomplete="off">
@@ -233,8 +262,10 @@ const archRows = () => state.papers.filter(inArchive);
 function render(){
   $("#n-week").textContent = weekRows().length || "";
   $("#n-arch").textContent = archRows().length || "";
-  for(const t of ["week","arch"])
+  for(const t of ["week","arch","kw"])
     $("#tab-"+t).setAttribute("aria-selected", state.tab===t);
+  $("#cols").hidden = state.tab==="kw"; $("#kwpane").hidden = state.tab!=="kw";
+  if(state.tab==="kw"){ renderKw(); return; }
   $("#addbox").hidden = state.tab!=="arch";
 
   const rows = (state.tab==="week" ? weekRows() : archRows()).filter(matchesQ)
@@ -407,6 +438,107 @@ async function toggleSave(p){
 }
 
 let noteTimer;
+// ---------- Keywords: the scoring filters the daily fetch reads (settings row 'keywords')
+const kw = { cfg:null, edit:null, confirmDel:null, saving:false };
+async function loadKw(){
+  if(kw.cfg) return;
+  const { data, error } = await supabase.from('settings').select('value,updated_at').eq('key','keywords').maybeSingle();
+  if(error){ note("Could not load keywords: "+error.message, true); return; }
+  kw.cfg = data?.value || { groups:[], min_score:3 }; kw.updated = data?.updated_at;
+  render();
+}
+async function saveKw(msg){
+  kw.saving = true;
+  const { error } = await supabase.from('settings')
+    .update({ value: kw.cfg, updated_at: new Date().toISOString() }).eq('key','keywords');
+  kw.saving = false;
+  if(error){ note("Could not save: "+error.message, true); kw.cfg=null; await loadKw(); return false; }
+  note(msg + " Takes effect from the next run."); return true;
+}
+const gName = g => g.name || g.terms?.[0] || "Untitled";
+const minScore = () => kw.cfg?.min_score ?? 3;
+
+function kwCard(g, i){
+  const on = g.enabled !== false, core = g.w >= minScore();
+  if(kw.edit === i) return kwForm(g, i);
+  return `<div class="kcard ${on?"":"off"}">
+    <div class="krow">
+      <label class="tgl" title="${on?"Enabled":"Disabled"}"><input type="checkbox" data-tog="${i}" ${on?"checked":""}><span></span></label>
+      <h3>${esc(gName(g))}</h3>
+      <span class="kw-badge ${core?"":"sup"}">${core?"core":"supporting"}</span>
+      <button class="kact" data-edit="${i}">Edit</button>
+      ${kw.confirmDel===i
+        ? `<button class="kact bad" data-del-yes="${i}">Delete?</button><button class="kact" data-del-no>Keep</button>`
+        : `<button class="kact" data-del="${i}">Delete</button>`}
+    </div>
+    <div class="kterms">${(g.terms||[]).map(t=>`<span class="kterm">"${esc(t)}"</span>`).join("")}</div>
+    <div class="kexp">${core
+      ? "Core: any one of these terms in the title or abstract is enough on its own."
+      : `Supporting: worth ${g.w} point${g.w>1?"s":""}; a paper needs ${minScore()} points, so it only counts together with other filters.`}</div>
+  </div>`;
+}
+function kwForm(g, i){
+  const core = (g?.w ?? minScore()) >= minScore();
+  return `<form class="kcard kform" id="kwform" data-i="${i}">
+    <label>Name<input class="search" name="name" value="${esc(g?.name||"")}" placeholder="e.g. Rhombohedral graphene"></label>
+    <label>Terms, separated by commas (synonyms; any one matches)
+      <input class="search" name="terms" required value="${esc((g?.terms||[]).join(", "))}" placeholder="rhombohedral, abc graphene"></label>
+    <label>Type
+      <select name="w">
+        <option value="core" ${core?"selected":""}>Core: one match is enough</option>
+        <option value="sup" ${core?"":"selected"}>Supporting: counts 1 point, needs other filters too</option>
+      </select></label>
+    <div class="row"><button class="btn" type="button" data-cancel>Cancel</button><button class="btn primary" type="submit">Save</button></div>
+  </form>`;
+}
+function renderKw(){
+  const el = $("#kwpane");
+  if(!kw.cfg){ el.innerHTML = `<p class="empty">Loading keywords…</p>`; return; }
+  const gs = kw.cfg.groups || [];
+  const idx = gs.map((g,i)=>[g,i]);
+  const core = idx.filter(([g])=>g.w>=minScore()), sup = idx.filter(([g])=>g.w<minScore());
+  $("#n-kw").textContent = gs.filter(g=>g.enabled!==false).length || "";
+  el.innerHTML = `
+    <div class="kw-head"><h2>Your keyword filters</h2><button class="btn primary" id="kw-new">New filter</button></div>
+    <p class="kw-lede">A paper appears in This week when an enabled <b>core</b> filter matches its title or abstract,
+      or when ${minScore()} <b>supporting</b> filters match together. Matching ignores case, allows plural endings,
+      and treats spaces and hyphens alike. Already-fetched papers are not re-scored.</p>
+    ${kw.edit==="new" ? kwForm(null,"new") : ""}
+    <div class="kw-sec">Core · ${core.length}</div>${core.map(([g,i])=>kwCard(g,i)).join("") || '<p class="empty">None.</p>'}
+    <div class="kw-sec">Supporting · ${sup.length}</div>${sup.map(([g,i])=>kwCard(g,i)).join("") || '<p class="empty">None.</p>'}`;
+}
+$("#kwpane").addEventListener("click", async e=>{
+  const t = e.target.closest("[data-tog],[data-edit],[data-del],[data-del-yes],[data-del-no],[data-cancel],#kw-new");
+  if(!t || kw.saving) return;
+  const gs = kw.cfg.groups;
+  if(t.id==="kw-new"){ kw.edit="new"; kw.confirmDel=null; return renderKw(); }
+  if(t.dataset.edit!==undefined){ kw.edit=+t.dataset.edit; kw.confirmDel=null; return renderKw(); }
+  if(t.dataset.cancel!==undefined){ kw.edit=null; return renderKw(); }
+  if(t.dataset.del!==undefined){ kw.confirmDel=+t.dataset.del; return renderKw(); }
+  if(t.dataset.delNo!==undefined){ kw.confirmDel=null; return renderKw(); }
+  if(t.dataset.delYes!==undefined){
+    const [g] = gs.splice(+t.dataset.delYes,1); kw.confirmDel=null; kw.edit=null; renderKw();
+    await saveKw(`Deleted “${gName(g)}”.`); return renderKw();
+  }
+});
+$("#kwpane").addEventListener("change", async e=>{
+  const i = e.target.dataset.tog; if(i===undefined) return;
+  const g = kw.cfg.groups[+i]; g.enabled = e.target.checked; renderKw();
+  await saveKw(`${g.enabled?"Enabled":"Disabled"} “${gName(g)}”.`);
+});
+$("#kwpane").addEventListener("submit", async e=>{
+  e.preventDefault(); const f=e.target, fd=new FormData(f);
+  const terms=[...new Set(String(fd.get("terms")).split(",").map(x=>x.trim().toLowerCase()).filter(Boolean))];
+  if(!terms.length) return note("Add at least one term.", true);
+  const w = fd.get("w")==="core" ? minScore() : 1, name=String(fd.get("name")).trim();
+  const i=f.dataset.i, isNew = i==="new";
+  const g = isNew ? { enabled:true } : kw.cfg.groups[+i];
+  Object.assign(g, { terms, w }); if(name) g.name=name; else delete g.name;
+  if(isNew) kw.cfg.groups.push(g);
+  kw.edit=null; renderKw();
+  await saveKw(isNew ? `Added “${gName(g)}”.` : `Saved “${gName(g)}”.`); renderKw();
+});
+
 // ---------- add a published paper (journal link / DOI / arXiv) straight into the Archive
 async function addByLink(ev){
   ev.preventDefault();
@@ -443,6 +575,7 @@ $("#q").addEventListener("input", e=>{ state.q=e.target.value; render(); });
 $("#addbox").addEventListener("submit", addByLink);
 $("#tab-week").onclick=()=>{state.tab="week";render();};
 $("#tab-arch").onclick=()=>{state.tab="arch";render();};
+$("#tab-kw").onclick=()=>{state.tab="kw";render(); loadKw();};
 
 // ---------- sign-in gate: the database only answers the signed-in owner
 let started = false, signupMode = false;
@@ -476,6 +609,7 @@ supabase.auth.onAuthStateChange((_ev, session)=>{
 
 async function boot(){
   render();
+  loadKw();
 
   try{
     // Load runs

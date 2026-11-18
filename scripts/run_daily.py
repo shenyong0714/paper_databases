@@ -100,6 +100,21 @@ def iso_week():
 
 
 # ---------------------------------------------------------------- step 1: fetch
+def keywords_file():
+    """Keywords as edited on the website (settings table); the repo file is the fallback."""
+    try:
+        rows = supabase.table('settings').select('value,updated_at').eq('key', 'keywords').execute().data
+        if rows and rows[0]['value'].get('groups'):
+            f = WORK_DIR / 'keywords.json'
+            f.write_text(json.dumps(rows[0]['value'], ensure_ascii=False))
+            n = sum(len(g['terms']) for g in rows[0]['value']['groups'])
+            print(f"Keywords: {n} terms from the website settings (updated {rows[0]['updated_at'][:16]})")
+            return f
+    except Exception as e:
+        print(f"Keywords: could not read settings ({e}); using data/keywords.json")
+    return DATA_DIR / 'keywords.json'
+
+
 def run_fetcher():
     print("=" * 60)
     print("STEP 1: Fetching from arXiv")
@@ -108,7 +123,7 @@ def run_fetcher():
     output_file = WORK_DIR / 'fetch.json'
     result = subprocess.run(
         [sys.executable, str(SCRIPT_DIR / 'fetcher.py'),
-         str(DATA_DIR / 'keywords.json'), str(output_file)],
+         str(keywords_file()), str(output_file)],
         capture_output=True, text=True)
     print(result.stdout)
     if result.stderr:
